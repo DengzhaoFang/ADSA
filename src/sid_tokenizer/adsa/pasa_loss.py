@@ -1,0 +1,187 @@
+"""
+PASA Stage 3: Popularity-Aware Soft Contrastive Loss
+
+Replaces standard CMA (symmetric InfoNCE with hard [0,1] labels) with an
+asymmetric KL-divergence loss that uses:
+
+  1. Soft target matrix T(i,j) ∈ [0,1] from Stage 2 (topology-semantic
+     prior), which distinguishes genuine negatives from false negatives
+     (complements like "mouse pad" + "graphics card").
+
+  2. Popularity-aware asymmetric weights W_ij = w_j * (1 - w_i), where
+     w_i = sigmoid(log(pop_i + 1)).  Cold items (w_i ≈ 0) are pushed
+     toward hot items (w_j ≈ 1); hot items are PROTECTED from being
+     pulled toward noisy cold-item features.
+
+Mathematical form (per batch of size B):
+
+  sim(i,j) = h_t_i · h_c_j / τ               similarity matrix (B,B)
+  P(i,j)   = softmax_j(sim(i,j))             row-normalised distribution
+  Q(i,j)   = T(i,j) / Σ_k T(i,k)             target distribution from prior
+  KL_i     = Σ_j Q(i,j) · log(Q(i,j)/P(i,j)) per-anchor KL divergence
+  L        = (1/B) Σ_i Σ_j W_ij · Q(i,j) · log(Q(i,j)/P(i,j))
+
+Gradient flows ONLY through h_t and h_c → IDE parameters (W_t, W_c).
+T(i,j) and W_ij are fully detached structural priors.
+
+Mutual exclusivity: PASA and CMA must NOT be active simultaneously.
+The caller (train_adsa.py) should check this constraint.
+"""
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Optional, Tuple, Dict
+import numpy as np
+
+
+class PASA_Loss(nn.Module):
+    """
+    Popularity-Aware Soft Contrastive Learning loss.
+
+    Args:
+        temperature:     τ for softmax sharpness (default 0.2).
+        eps:             numerical stability for log/div (default 1e-8).
+        topk_K:          per-row Top-K truncation (default 5).  Relative
+                         constant — adaptive across datasets.
+    """
+
+    def __init__(self, temperature: float = 0.2, eps: float = 1e-8,
+                 topk_K: int = 5):
+        super().__init__()
+        self.temperature = temperature
+        self.eps = eps
+        self.topk_K = topk_K
+
+    # ── Public API ──────────────────────────────────────────────────
+
+    def forward(
+        self,
+        h_t: torch.Tensor,
+        h_c: torch.Tensor,
+        T: torch.Tensor,
+        item_popularities: torch.Tensor,
+    ) -> Tuple[torch.Tensor, Dict[str, float]]:
+        """
+        Args:
+            h_t:              IDE text projections   (B, d), L2-normalised.
+            h_c:              IDE collab projections (B, d), L2-normalised.
+            T:                Soft target matrix     (B, B), T[i,j] ∈ [0,1],
+                              diagonal = 1.0.  Fully detached prior from
+                              TopologySemanticPrior.compute_T().
+            item_popularities: Raw interaction counts (B,), used to derive
+                              asymmetric weights.  Not detached here but
+                              treated as constants (no grad through w_i).
+
+        Returns:
+            loss:      Scalar PASA loss.
+            loss_dict: Per-component values for logging.
+        """
+        B = h_t.size(0)
+        device = h_t.device
+
+        # 0. L2-normalise — IDE outputs have norms ~11.3, causing softmax
+        #    underflow without normalisation.  Standard for contrastive loss.
+        h_t = F.normalize(h_t, p=2, dim=-1)
+        h_c = F.normalize(h_c, p=2, dim=-1)
+
+        # 1. Popularity weights for asymmetric mask
+        w = self._compute_pop_weights(item_popularities, device)  # (B,)
+
+        # 2. Asymmetric mask: W_mask[i,j] = (1-w_i) * w_j
+        #    cold anchor (w_i≈0) aligns to hot key (w_j≈1) → weight≈1
+        #    hot anchor (w_i≈1) aligns to cold key (w_j≈0) → weight≈0
+        W_mask = (1.0 - w.unsqueeze(1)) * w.unsqueeze(0)  # (B, B)
+
+        # 3. Modulate the TARGET T (not the KL elements!)
+        #    Diagonal (self-alignment) always = 1.0 — the most reliable signal.
+        #    Off-diagonal targets are masked by W_mask to implement asymmetric
+        #    denoising while PRESERVING the softmax repulsion force.
+        I = torch.eye(B, device=device)
+        T_asym = T * (1.0 - I) * W_mask + I  # (B, B)
+
+        # 4. Top-K sparse truncation on raw T (BEFORE W_mask weighting).
+        #    This ensures we always have K meaningful targets regardless
+        #    of how small the W_mask-weighted values become.  W_mask is
+        #    then applied ONLY to the selected Top-K positions.
+        K = min(self.topk_K, B - 1)
+        # Top-K on raw T (off-diagonal only — exclude diag to avoid trivial selection)
+        T_off = T * (1.0 - I)
+        _, topk_idx = torch.topk(T_off, k=K, dim=-1)
+        topk_mask = torch.zeros_like(T_off).scatter_(-1, topk_idx, 1.0)
+        # Apply W_mask only to selected Top-K off-diagonal targets
+        T_asym = T_off * topk_mask * W_mask + I  # diag=1.0 preserved
+
+        # 5. Bidirectional KL to preserve uniform space (prevents collapse)
+        sim = (h_t @ h_c.T) / self.temperature
+
+        # Text → Collab
+        Q_t2c = T_asym / (T_asym.sum(dim=-1, keepdim=True) + self.eps)
+        log_P_t2c = F.log_softmax(sim, dim=-1)
+        loss_t2c = F.kl_div(log_P_t2c, Q_t2c, reduction='batchmean')
+
+        # Collab → Text
+        Q_c2t = T_asym.T / (T_asym.T.sum(dim=-1, keepdim=True) + self.eps)
+        log_P_c2t = F.log_softmax(sim.T, dim=-1)
+        loss_c2t = F.kl_div(log_P_c2t, Q_c2t, reduction='batchmean')
+
+        loss = (loss_t2c + loss_c2t) / 2.0
+
+        # ── Diagnostics ──
+        with torch.no_grad():
+            mean_kl = loss.item()
+
+            cold_mask = w <= w.median()
+            hot_mask = w > w.median()
+            if cold_mask.any() and hot_mask.any():
+                w_cold_to_hot = W_mask[cold_mask][:, hot_mask].mean().item()
+                w_hot_to_cold = W_mask[hot_mask][:, cold_mask].mean().item()
+            else:
+                w_cold_to_hot, w_hot_to_cold = 0.0, 0.0
+
+            q_entropy = -(Q_t2c * torch.log(Q_t2c + self.eps)).sum(dim=-1).mean().item()
+            top1_match = (log_P_t2c.argmax(dim=-1) == Q_t2c.argmax(dim=-1)).float().mean().item()
+
+        loss_dict = {
+            'pasa': loss.item(),
+            'mean_kl': mean_kl,
+            'w_cold2hot': w_cold_to_hot,
+            'w_hot2cold': w_hot_to_cold,
+            'q_entropy': q_entropy,
+            'top1_match': top1_match,
+            'w_mean': w.mean().item(),
+        }
+
+        return loss, loss_dict
+
+    # ── Internal ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _compute_pop_weights(
+        popularities: torch.Tensor, device: torch.device
+    ) -> torch.Tensor:
+        """
+        w_i = sigmoid(log(pop_i + 1) - shift)
+
+        The shift (log of median popularity) centres the sigmoid so that
+        the median item gets w ≈ 0.5, providing a balanced asymmetry.
+        """
+        pop = popularities.float().to(device)
+        log_pop = torch.log(pop + 1.0)
+        # Centre at median so ~half the batch gets w>0.5
+        shift = log_pop.median()
+        return torch.sigmoid(log_pop - shift)
+
+
+# ═══════════════════════════════════════════════════════════════════
+# Compatibility guard
+# ═══════════════════════════════════════════════════════════════════
+
+def validate_mutual_exclusivity(use_pasa: bool, use_cma: bool):
+    """Raise ValueError if both PASA and CMA are enabled."""
+    if use_pasa and use_cma:
+        raise ValueError(
+            "PASA and CMA are mutually exclusive. "
+            "PASA replaces CMA with an asymmetric, topology-aware "
+            "soft contrastive loss.  Set use_cma=False when use_pasa=True."
+        )
