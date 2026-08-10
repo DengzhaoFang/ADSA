@@ -5,8 +5,8 @@ All hyperparameters are configured in config.py.
 Only specify essential runtime parameters (config, device, num_workers).
 
 Usage:
-    python -m src.recommender.train --config beauty --device cuda:0 --num_workers 4
-    python -m src.recommender.train --config beauty --device cuda:0 --model_type t5-small-raw
+    python -m src.recommender.adsa.train --config beauty --device cuda:0 --num_workers 4
+    python -m src.recommender.adsa.train --config beauty --device cuda:0 --model_type t5-small
 """
 
 import argparse
@@ -128,18 +128,18 @@ def parse_args():
     Only specify essential runtime parameters here.
     """
     parser = argparse.ArgumentParser(
-        description="Train TIGER recommender model",
+        description="Train ADSA recommender model",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Train with default config
-  python -m src.recommender.train --config beauty --device cuda:0
+  python -m src.recommender.adsa.train --config beauty --device cuda:0
 
   # Use T5-small model
-  python -m src.recommender.train --config beauty --device cuda:0 --model_type t5-small-raw
+  python -m src.recommender.adsa.train --config beauty --device cuda:0 --model_type t5-small
 
   # Custom output directory
-  python -m src.recommender.train --config beauty --device cuda:0 --output_dir ./my_output
+  python -m src.recommender.adsa.train --config beauty --device cuda:0 --output_dir ./my_output
         """
     )
 
@@ -190,6 +190,8 @@ Examples:
     )
 
     # Stage 1 path overrides (for hyperparameter sweep)
+    parser.add_argument('--sequence_data_path', type=str, default=None,
+                        help='Override sequence data directory')
     parser.add_argument('--semantic_mapping_path', type=str, default=None,
                         help='Override semantic_id_mappings.json path from Stage 1')
     parser.add_argument('--purified_content_path', type=str, default=None,
@@ -421,7 +423,7 @@ def _load_data(logger, config: dict):
 
 
 def _create_model(logger, config: dict, semantic_mapper=None):
-    """Create TIGER model.
+    """Create ADSA recommender model.
 
     Args:
         logger: Logger instance
@@ -450,7 +452,7 @@ def _log_config(logger, config: dict, model_type: str):
         model_type: Model type string
     """
     logger.info("=" * 80)
-    logger.info("TIGER RECOMMENDER TRAINING")
+    logger.info("ADSA RECOMMENDER TRAINING")
     logger.info("=" * 80)
 
     logger.info("\nConfiguration:")
@@ -559,6 +561,8 @@ def _build_config_kwargs(args) -> dict:
         config_kwargs['purified_predictor_weight'] = args.purified_predictor_weight
 
     # Stage 1 path overrides (for hyperparameter sweep)
+    if args.sequence_data_path is not None:
+        config_kwargs['sequence_data_path'] = args.sequence_data_path
     if args.semantic_mapping_path is not None:
         config_kwargs['semantic_mapping_path'] = args.semantic_mapping_path
     if args.purified_content_path is not None:

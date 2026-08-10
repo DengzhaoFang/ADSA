@@ -14,11 +14,10 @@ python process_amazon.py \
     --embed_mode adsa \
     --embed_model sentence-t5 \
     --model_source modelscope \
-    --device cuda:3 \
+    --device auto \
     --print_samples 10
 
 echo ""
 echo "=================================="
 echo "Data processing completed!"
-
 

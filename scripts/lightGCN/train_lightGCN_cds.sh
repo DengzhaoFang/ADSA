@@ -13,6 +13,7 @@ DATA_DIR="../../../dataset/Amazon-CDs/processed/cds-adsa-sentenceT5base/CDs"
 
 # Set output directory
 OUTPUT_DIR=$DATA_DIR/lightgcn
+EXP_NAME="${EXP_NAME:-}"
 
 
 # Model hyperparameters

@@ -47,9 +47,18 @@ class ADSADataset(Dataset):
         self.item_ids = item_df['ItemID'].values
         self.num_items = len(item_df)
 
+        embedding_col = 'embedding'
+        if embedding_col not in item_df.columns:
+            if 'attribute_embedding' not in item_df.columns:
+                raise KeyError(
+                    "item_emb.parquet must contain either 'embedding' "
+                    "or 'attribute_embedding'"
+                )
+            embedding_col = 'attribute_embedding'
+
         self.content_embeddings = torch.stack([
             torch.tensor(emb, dtype=torch.float32)
-            for emb in item_df['embedding']
+            for emb in item_df[embedding_col]
         ])
 
         print(f"Loading collaborative embeddings from {collab_embedding_file}...")
@@ -201,4 +210,3 @@ def create_dataloaders(
     )
 
     return dataloader, dataset
-

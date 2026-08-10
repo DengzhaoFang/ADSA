@@ -215,7 +215,7 @@ def get_beauty_config(
 ) -> dict:
     tokenizer_dir = "scripts/output/adsa_tokenizer/beauty/hparam_stage1_PASCL/pasa_text_dominant"
     default_paths = {
-        'sequence_data_path': "dataset/Amazon-Beauty/processed/beauty-tiger-sentenceT5base/Beauty",
+        'sequence_data_path': "dataset/Amazon-Beauty/processed/beauty-adsa-sentenceT5base/Beauty",
         'semantic_mapping_path': f"{tokenizer_dir}/semantic_id_mappings.json",
         'purified_content_path': f"{tokenizer_dir}/item_purified_content.npy",
         'purified_collab_path': f"{tokenizer_dir}/item_purified_collab.npy",
@@ -241,10 +241,12 @@ def get_sports_config(
     model_type: str = "t5-nano",
     **kwargs
 ) -> dict:
+    tokenizer_dir = "scripts/output/adsa_tokenizer/sports/hparam_stage1_PASCL/pasa_text_dominant"
     default_paths = {
-        'sequence_data_path': "dataset/Amazon-Sports/processed/sports-tiger-sentenceT5base/Sports",
-        'semantic_mapping_path': "scripts/output/adsa_tokenizer/sports/3-256-32-ema-only-5-core-items/semantic_id_mappings.json",
-        'purified_content_path': None, 'purified_collab_path': None,
+        'sequence_data_path': "dataset/Amazon-Sports/processed/sports-adsa-sentenceT5base/Sports",
+        'semantic_mapping_path': f"{tokenizer_dir}/semantic_id_mappings.json",
+        'purified_content_path': f"{tokenizer_dir}/item_purified_content.npy",
+        'purified_collab_path': f"{tokenizer_dir}/item_purified_collab.npy",
     }
     return _create_dataset_config(
         dataset_name="sports", sequence_data_path=sequence_data_path,
@@ -267,10 +269,12 @@ def get_toys_config(
     model_type: str = "t5-tiny-2",
     **kwargs
 ) -> dict:
+    tokenizer_dir = "scripts/output/adsa_tokenizer/toys/hparam_stage1_PASCL/pasa_default"
     default_paths = {
-        'sequence_data_path': "dataset/Amazon-Toys/processed/toys-tiger-sentenceT5base/Toys",
-        'semantic_mapping_path': "scripts/output/adsa_tokenizer/toys/3-256-32-ema-only-5-core-items/semantic_id_mappings.json",
-        'purified_content_path': None, 'purified_collab_path': None,
+        'sequence_data_path': "dataset/Amazon-Toys/processed/toys-adsa-sentenceT5base/Toys",
+        'semantic_mapping_path': f"{tokenizer_dir}/semantic_id_mappings.json",
+        'purified_content_path': f"{tokenizer_dir}/item_purified_content.npy",
+        'purified_collab_path': f"{tokenizer_dir}/item_purified_collab.npy",
     }
     return _create_dataset_config(
         dataset_name="toys", sequence_data_path=sequence_data_path,
@@ -293,10 +297,12 @@ def get_cds_config(
     model_type: str = "t5-tiny-2",
     **kwargs
 ) -> dict:
+    tokenizer_dir = "scripts/output/adsa_tokenizer/cds/hparam_stage1_PASCL/pasa_graph_dominant"
     default_paths = {
-        'sequence_data_path': "dataset/Amazon-CDs/processed/cds-tiger-sentenceT5base/CDs",
-        'semantic_mapping_path': "scripts/output/adsa_tokenizer/cds/3-256-32-ema-only-5-core-items/semantic_id_mappings.json",
-        'purified_content_path': None, 'purified_collab_path': None,
+        'sequence_data_path': "dataset/Amazon-CDs/processed/cds-adsa-sentenceT5base/CDs",
+        'semantic_mapping_path': f"{tokenizer_dir}/semantic_id_mappings.json",
+        'purified_content_path': f"{tokenizer_dir}/item_purified_content.npy",
+        'purified_collab_path': f"{tokenizer_dir}/item_purified_collab.npy",
     }
     return _create_dataset_config(
         dataset_name="cds", sequence_data_path=sequence_data_path,

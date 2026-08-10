@@ -13,6 +13,7 @@ DATA_DIR="../../../dataset/Amazon-Beauty/processed/beauty-adsa-sentenceT5base/Be
 
 # Set output directory
 OUTPUT_DIR=$DATA_DIR/lightgcn
+EXP_NAME="${EXP_NAME:-}"
 
 
 # Model hyperparameters
