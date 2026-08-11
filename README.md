@@ -1,50 +1,40 @@
 # ADSA
 
-This repository contains the reference implementation for **ADSA**, a generative recommendation framework built on semantic IDs.
+This repository contains the reference implementation for **ADSA**, a generative recommendation framework based on semantic IDs.
 
-ADSA has two main stages:
+ADSA contains two stages:
 
-1. **Stage 1: semantic ID tokenizer**
-   - Trains an RQ-VAE tokenizer over item semantic and collaborative features.
-   - Uses **PASA** (Popularity-Aware Soft Alignment) to replace hard in-batch contrastive targets with topology/text-aware soft targets.
-   - Exports semantic ID mappings and purified continuous item features.
-2. **Stage 2: generative recommender**
-   - Trains an autoregressive sequential recommender over semantic IDs.
-   - Uses **SSM** (Sparse Semantic Management) to inject purified continuous features through sparse MoE fusion during generation.
-
-The repository also includes scripts for data preprocessing, LightGCN collaborative feature training, ADSA training, and several semantic-ID baselines.
+1. **Semantic ID tokenizer**: trains an RQ-VAE tokenizer with PASA (Popularity-Aware Soft Alignment) and exports semantic ID mappings plus purified item features.
+2. **Generative recommender**: trains an autoregressive recommender over semantic IDs and uses SSM (Sparse Semantic Management) to inject continuous item features during generation.
 
 ## Repository Layout
 
 ```text
 data/
-  process_amazon.py              # Amazon review/meta preprocessing and text embedding generation
+  process_amazon.py              # Amazon preprocessing
+  process_movielens.py           # MovieLens preprocessing
 scripts/
   data/                          # Dataset preprocessing scripts
-  lightGCN/                      # Stage-0 collaborative embedding scripts
-  adsa/                          # ADSA Stage-1 tokenizer scripts
+  lightGCN/                      # Collaborative embedding scripts
+  adsa/                          # ADSA tokenizer scripts
   TIGER/ EAGER/ LETTER/ ActionPiece/
-                                 # Baseline tokenizer/recommender scripts
+                                 # Baseline scripts
 src/
-  sid_tokenizer/
-    adsa/                        # ADSA tokenizer, PASA loss/prior, semantic ID export
-    lightgcn/                    # LightGCN used to initialize collaborative item features
-  recommender/
-    adsa/                        # ADSA generative recommender, SSM/MoE fusion, evaluation
+  sid_tokenizer/adsa/            # ADSA tokenizer and PASA modules
+  sid_tokenizer/lightgcn/        # LightGCN feature extraction
+  recommender/adsa/              # ADSA recommender and SSM/MoE modules
 ```
 
 ## Environment
 
-Python 3.10 is recommended. The project uses PyTorch 2.6.0 with CUDA 12.4 wheels in `pyproject.toml`.
-
-Using `uv`:
+Python 3.10 is recommended.
 
 ```bash
 uv sync
 source .venv/bin/activate
 ```
 
-Or using pip:
+Alternatively:
 
 ```bash
 python -m venv .venv
@@ -53,11 +43,9 @@ pip install -U pip
 pip install -e .
 ```
 
-For CPU-only preprocessing, set `--device cpu` in the data scripts or call `data/process_amazon.py` directly.
+## Data Preparation
 
-## Data
-
-The experiments use public Amazon review datasets. Place the raw gzipped review and metadata files under `dataset/` with the following structure:
+The code supports Amazon review datasets and MovieLens-1M. Raw files are expected under `dataset/`.
 
 ```text
 dataset/
@@ -73,67 +61,73 @@ dataset/
   Amazon-Toys/
     reviews_Toys_and_Games.json.gz
     meta_Toys_and_Games.json.gz
+  Amazon-Books/
+    reviews_Books.json.gz
+    meta_Books.json.gz
+  MovieLens-1M/
+    ml-1m/
+      ratings.dat
+      movies.dat
 ```
 
-Then run preprocessing:
+Run preprocessing with:
 
 ```bash
 bash scripts/data/process_beauty_data.sh
 bash scripts/data/process_cds_data.sh
 bash scripts/data/process_sports_data.sh
 bash scripts/data/process_toys_data.sh
+bash scripts/data/process_books_data.sh
+bash scripts/data/process_ml1m_data.sh
 ```
 
-Each script applies 5-core filtering, creates `train.parquet`, `valid.parquet`, `test.parquet`, item ID mappings, and `item_emb.parquet`.
-
-Default processed data directories are:
+The processed directories follow the same layout:
 
 ```text
 dataset/Amazon-Beauty/processed/beauty-adsa-sentenceT5base/Beauty
 dataset/Amazon-CDs/processed/cds-adsa-sentenceT5base/CDs
 dataset/Amazon-Sports/processed/sports-adsa-sentenceT5base/Sports
 dataset/Amazon-Toys/processed/toys-adsa-sentenceT5base/Toys
+dataset/Amazon-Books/processed/books-adsa-sentenceT5base/Books
+dataset/MovieLens-1M/processed/ml1m-adsa-sentenceT5base/ML-1M
 ```
 
-If you already have processed `*-tiger-sentenceT5base` directories from earlier experiments, pass `DATA_PATH=...` to the tokenizer scripts and `--sequence_data_path ...` to the recommender.
+Each processed dataset contains sequence splits and item-side embeddings used by the tokenizer and recommender.
 
-## Stage 0: LightGCN Collaborative Features
+## Collaborative Features
 
-ADSA Stage 1 expects a LightGCN item embedding file at:
-
-```text
-<processed_dataset>/lightgcn/item_embeddings_collab.npy
-```
-
-Generate it with:
+Train LightGCN item embeddings before Stage 1:
 
 ```bash
 bash scripts/lightGCN/train_lightGCN_beauty.sh
 bash scripts/lightGCN/train_lightGCN_cds.sh
 bash scripts/lightGCN/train_lightGCN_sports.sh
 bash scripts/lightGCN/train_lightGCN_toys.sh
+bash scripts/lightGCN/train_lightGCN_books.sh
+bash scripts/lightGCN/train_lightGCN_ml1m.sh
 ```
 
-The default LightGCN configuration uses embedding dimension 64, 3 GCN layers, 500 epochs, batch size 2048, learning rate 0.001, and early stopping on `Recall@20` with patience 20.
+The resulting item features are stored under each processed dataset directory.
 
-## Stage 1: ADSA Tokenizer with PASA
+## ADSA Tokenizer
 
-Run the dataset-specific scripts:
+Train semantic IDs with:
 
 ```bash
 bash scripts/adsa/train_adsa_beauty.sh
 bash scripts/adsa/train_adsa_cds.sh
 bash scripts/adsa/train_adsa_sports.sh
 bash scripts/adsa/train_adsa_toys.sh
+bash scripts/adsa/train_adsa_books.sh
+bash scripts/adsa/train_adsa_ml1m.sh
 ```
 
-Useful overrides:
+Common overrides:
 
 ```bash
 DEVICE=cuda:1 bash scripts/adsa/train_adsa_beauty.sh
-DATA_PATH=dataset/Amazon-Beauty/processed/beauty-tiger-sentenceT5base/Beauty bash scripts/adsa/train_adsa_beauty.sh
 ALIGNMENT=cma bash scripts/adsa/train_adsa_beauty.sh
-PASA_TOPK=7 TEXT_SHARPEN_GAMMA=5.0 GRAPH_SCALE_BETA=0.05 bash scripts/adsa/train_adsa_cds.sh
+DATA_PATH=/path/to/processed/Dataset OUTPUT_DIR=/path/to/output bash scripts/adsa/train_adsa_books.sh
 ```
 
 Stage-1 outputs include:
@@ -149,11 +143,9 @@ item_codebook_zq.npy
 training.log
 ```
 
-Tokenizer early stopping monitors training `total_loss`; lower is better. The scripts use `early_stop_min_delta=1e-5`, warmup 5 epochs, cooldown 3 epochs, and patience 50 for Beauty or 30 for CDs/Sports/Toys.
+## ADSA Recommender
 
-## Stage 2: ADSA Recommender with SSM
-
-Example for Beauty:
+Example:
 
 ```bash
 python -m src.recommender.adsa.train \
@@ -171,22 +163,20 @@ python -m src.recommender.adsa.train \
   --output_keywords adsa_ssm
 ```
 
-For CDs with the paper MoE setting:
+Supported `--config` values:
+
+```text
+beauty, cds, sports, toys, books, ml1m
+```
+
+For custom Stage-1 outputs:
 
 ```bash
 python -m src.recommender.adsa.train \
-  --config cds \
-  --device cuda:0 \
-  --num_workers 4 \
-  --model_type t5-tiny-2 \
-  --use_multimodal_fusion \
-  --fusion_gate_type moe \
-  --moe_num_experts 5 \
-  --moe_top_k 2 \
-  --moe_use_load_balancing \
-  --moe_load_balance_weight 0.01 \
-  --use_trie_constraints \
-  --output_keywords adsa_ssm
+  --config books \
+  --semantic_mapping_path /path/to/semantic_id_mappings.json \
+  --purified_content_path /path/to/item_purified_content.npy \
+  --purified_collab_path /path/to/item_purified_collab.npy \
+  --sequence_data_path /path/to/processed/Books \
+  --use_multimodal_fusion
 ```
-
-Recommender early stopping monitors validation `NDCG@20`; higher is better. The default recommender config evaluates every 3 epochs and uses patience 10 for the compact T5 variants.

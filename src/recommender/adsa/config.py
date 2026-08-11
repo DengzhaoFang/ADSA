@@ -315,9 +315,66 @@ def get_cds_config(
     )
 
 
+def get_books_config(
+    sequence_data_path: Optional[str] = None,
+    semantic_mapping_path: Optional[str] = None,
+    purified_content_path: Optional[str] = None,
+    purified_collab_path: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    checkpoint_dir: Optional[str] = None,
+    model_type: str = "t5-tiny-2",
+    **kwargs
+) -> dict:
+    tokenizer_dir = "scripts/output/adsa_tokenizer/books/pasa_default"
+    default_paths = {
+        'sequence_data_path': "dataset/Amazon-Books/processed/books-adsa-sentenceT5base/Books",
+        'semantic_mapping_path': f"{tokenizer_dir}/semantic_id_mappings.json",
+        'purified_content_path': f"{tokenizer_dir}/item_purified_content.npy",
+        'purified_collab_path': f"{tokenizer_dir}/item_purified_collab.npy",
+    }
+    return _create_dataset_config(
+        dataset_name="books", sequence_data_path=sequence_data_path,
+        semantic_mapping_path=semantic_mapping_path,
+        output_dir=output_dir, checkpoint_dir=checkpoint_dir,
+        model_type=model_type, default_paths=default_paths,
+        purified_content_path=purified_content_path,
+        purified_collab_path=purified_collab_path,
+        **kwargs
+    )
+
+
+def get_ml1m_config(
+    sequence_data_path: Optional[str] = None,
+    semantic_mapping_path: Optional[str] = None,
+    purified_content_path: Optional[str] = None,
+    purified_collab_path: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    checkpoint_dir: Optional[str] = None,
+    model_type: str = "t5-tiny-2",
+    **kwargs
+) -> dict:
+    tokenizer_dir = "scripts/output/adsa_tokenizer/ml1m/pasa_default"
+    default_paths = {
+        'sequence_data_path': "dataset/MovieLens-1M/processed/ml1m-adsa-sentenceT5base/ML-1M",
+        'semantic_mapping_path': f"{tokenizer_dir}/semantic_id_mappings.json",
+        'purified_content_path': f"{tokenizer_dir}/item_purified_content.npy",
+        'purified_collab_path': f"{tokenizer_dir}/item_purified_collab.npy",
+    }
+    return _create_dataset_config(
+        dataset_name="ml1m", sequence_data_path=sequence_data_path,
+        semantic_mapping_path=semantic_mapping_path,
+        output_dir=output_dir, checkpoint_dir=checkpoint_dir,
+        model_type=model_type, default_paths=default_paths,
+        purified_content_path=purified_content_path,
+        purified_collab_path=purified_collab_path,
+        **kwargs
+    )
+
+
 CONFIG_REGISTRY = {
     "beauty": get_beauty_config, "sports": get_sports_config,
-    "toys": get_toys_config, "cds": get_cds_config
+    "toys": get_toys_config, "cds": get_cds_config,
+    "books": get_books_config, "ml1m": get_ml1m_config
 }
 
 

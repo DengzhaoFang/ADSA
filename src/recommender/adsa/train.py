@@ -149,7 +149,7 @@ Examples:
         type=str,
         required=False,
         default=None,
-        choices=['beauty', 'sports', 'toys', 'cds'],
+        choices=['beauty', 'sports', 'toys', 'cds', 'books', 'ml1m'],
         help='Dataset configuration (all hyperparameters are in config.py). Not required when resuming from checkpoint.'
     )
 
